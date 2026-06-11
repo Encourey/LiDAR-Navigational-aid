@@ -1,0 +1,47 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.env/
+.env.*
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# ML / model artifacts (optional but recommended)
+*.h5
+*.pt
+*.pth
+*.onnx
+*.ckpt
+
+# Large datasets (customize for your project)
+data/
+datasets/
+*.csv
+*.zip
+*.tar
+*.gz
+
+# Model outputs (optional)
+outputs/
+runs/
+
+# Byte-compiled / cached models
+*.ncnn.bin
+*.ncnn.param
