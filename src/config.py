@@ -28,8 +28,8 @@ CLASS_NAMES  = {0: "car", 1: "pedestrian", 2: "cyclist"}
 MODE         = "auto"    # "outdoor" | "indoor" | "auto"
 
 # ── Indoor zone detection ─────────────────────────────────────────────────────
-INDOOR_WARN_DIST      = 1.5
-INDOOR_DENSITY_THRESH = 8
+INDOOR_WARN_DIST      = 2.5
+INDOOR_DENSITY_THRESH = 4
 
 # ── Auto mode switching ───────────────────────────────────────────────────────
 AUTO_SWITCH_DIST      = 4.0
