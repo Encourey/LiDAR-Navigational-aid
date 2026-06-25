@@ -1,0 +1,41 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+.env/
+.env.*
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# Large raw datasets — never track these
+data/kitti_raw/
+data/dataset/
+
+# Training run outputs — too large, regenerate instead
+experiments/
+runs/
+
+# Test outputs
+outputs/
+
+# Model weights — large binary files, transfer via SCP not git
+models/best_ncnn_model/*.bin
+models/best_ncnn_model/*.param
+models/best_ncnn_model/__pycache__/
