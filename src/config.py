@@ -9,9 +9,9 @@ All tunable parameters live here — no magic numbers elsewhere.
 MODEL_PATH   = "/home/admin/research/models/best_ncnn_model"
 LIDAR_PORT   = "/dev/ttyUSB0"
 
-# ── LiDAR serial ──────────────────────────────────────────────────────────────
-BAUD_RATE    = 115200
-MAX_DIST_MM  = 12000     # filter no-return readings (A1M8 returns ~16000)
+# ── LiDAR serial (YDLIDAR X3 YB) ─────────────────────────────────────────────
+BAUD_RATE    = 115200    # X3 YB requires 115200 (was 115200 for RPLIDAR A1M8)
+MAX_DIST_MM  = 8000      # X3 reliable range ~8m (was 12000 for A1M8)
 MIN_QUALITY  = 5         # discard low-quality scan points
 
 # ── BEV projection ────────────────────────────────────────────────────────────
@@ -33,9 +33,11 @@ INDOOR_DENSITY_THRESH = 4
 
 # ── Auto mode switching ───────────────────────────────────────────────────────
 AUTO_SWITCH_DIST      = 4.0
+AUTO_SWITCH_FRAMES    = 5    # consecutive frames required before switching mode
 
 # ── Scan collection ───────────────────────────────────────────────────────────
-SCAN_DURATION         = 0.12
+# Removed SCAN_DURATION — reader now collects by full rotation (new_scan bit),
+# not by time. This guarantees complete 360° coverage every frame.
 
 # ── Haptic (DRV2605L via I2C) ─────────────────────────────────────────────────
 HAPTIC_ENABLED = False
@@ -59,3 +61,4 @@ TRAIN_RESOLUTION = 0.1
 TRAIN_IMG_SIZE   = 320
 TRAIN_VAL_SPLIT  = 0.2
 TRAIN_CLASS_MAP  = {"Car": 0, "Pedestrian": 1, "Cyclist": 2}
+

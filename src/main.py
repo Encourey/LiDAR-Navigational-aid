@@ -16,6 +16,7 @@ Ctrl+C to stop — safely disconnects LiDAR and closes serial port.
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import time
 import argparse
 
@@ -71,15 +72,28 @@ def main():
     producer.start()
     print("\nNavigation loop running. Press Ctrl+C to stop.\n")
 
-    frame_count = 0
+    frame_count   = 0
+    last_frame_id = -1        # track last processed frame_id
+
     try:
         while True:
-            t0  = time.time()
-            pts = producer.get_latest()
+            # Get latest scan — returns (pts, frame_id) tuple now
+            pts, frame_id = producer.get_latest()
 
-            if pts is None or len(pts) < 20:
+            # Nothing produced yet
+            if pts is None:
                 time.sleep(0.01)
                 continue
+
+            # Same frame as last iteration — wait for new scan
+            if frame_id == last_frame_id:
+                time.sleep(0.01)
+                continue
+
+            # New frame — process it
+            last_frame_id = frame_id
+            frame_count  += 1
+            t0            = time.time()
 
             # Run navigation check
             if args.mode == "auto":
@@ -89,7 +103,6 @@ def main():
                 current_mode = args.mode
 
             elapsed = (time.time() - t0) * 1000
-            frame_count += 1
 
             # Deliver feedback
             deliver_feedback(haptic, audio, alerts)

@@ -18,6 +18,14 @@ Design choice — shared slot vs queue:
   Stale frames in a queue would increase latency. If the main
   thread is slower than the scan rate, it simply processes the
   most recent available frame and skips intermediate ones.
+
+Frame staleness fix:
+  Added _frame_id counter that increments on every new scan.
+  get_latest() returns (pts, frame_id) tuple.
+  Main loop checks if frame_id changed before processing —
+  if not, sleeps 10ms and checks again instead of re-processing
+  the same stale points at thousands of frames per second.
+  This is what caused the 127k frame/0ms runaway loop.
 """
 
 import threading
@@ -30,13 +38,16 @@ from src import config as cfg
 class ScanProducer:
     """
     Background thread that continuously collects LiDAR scan frames.
-    Exposes the latest scan via get_latest().
+    Exposes the latest scan via get_latest() as (pts, frame_id) tuple.
+    frame_id increments every time a genuinely new scan is stored —
+    main loop uses this to skip stale frames instead of reprocessing.
     """
 
     def __init__(self):
         self._reader   = LidarReader()
         self._parser   = LidarParser(self._reader)
         self._latest   = None
+        self._frame_id = 0        # increments on every new scan
         self._lock     = threading.Lock()
         self._active   = False
         self._thread   = None
@@ -56,12 +67,17 @@ class ScanProducer:
             pts = self._parser.collect_scan()
             if len(pts) >= 20:
                 with self._lock:
-                    self._latest = pts
+                    self._latest   = pts
+                    self._frame_id += 1   # signal: new frame available
 
     def get_latest(self):
-        """Return the most recent scan array (Nx2) or None."""
+        """
+        Return (pts_array, frame_id) tuple.
+        frame_id is an int that increments with every new scan.
+        If frame_id hasn't changed since last call, the data is stale.
+        """
         with self._lock:
-            return self._latest
+            return self._latest, self._frame_id
 
     def stop(self):
         """Stop the background thread and disconnect LiDAR."""
