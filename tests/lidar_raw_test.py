@@ -1,15 +1,8 @@
 """
 tests/lidar_raw_test.py
 ───────────────────────
-Direct serial communication test for YDLIDAR X3 YB.
-Bypasses all library code — talks raw UART bytes.
-Run this first to confirm the LiDAR is detected and responding.
-
-Expected output:
-  Connected on /dev/ttyUSB0 @ 128000 baud
-  Received scan packet — num_points: 40  angle: 0.00° → 22.50°
-  distances (mm): [823, 841, 856, ...]
-  Test passed.
+Dumps raw YDLIDAR X3 packet data — angles, distances, point counts.
+Run this to diagnose wrap detection and distance scaling issues.
 
 Usage: python tests/lidar_raw_test.py
 """
@@ -30,54 +23,81 @@ ser = serial.Serial(
     stopbits=serial.STOPBITS_ONE,
 )
 
-# Stop any existing scan, flush, start
 ser.write(b"\xA5\x65")
 time.sleep(0.1)
 ser.reset_input_buffer()
 time.sleep(0.1)
 ser.write(b"\xA5\x60")
 time.sleep(0.3)
-print(f"Connected on {cfg.LIDAR_PORT} @ {cfg.BAUD_RATE} baud")
+print("Collecting 30 packets...\n")
 
-# Try to read one packet by syncing to 0xAA 0x55 header
-print("Waiting for scan packet...")
-found = False
-for _ in range(5000):
+packets_collected = 0
+all_angles_start  = []
+all_angles_end    = []
+all_distances     = []
+
+for attempt in range(10000):
+    if packets_collected >= 30:
+        break
+
     b = ser.read(1)
     if not b:
-        break
-    if b[0] == 0xAA:
-        b2 = ser.read(1)
-        if b2 and b2[0] == 0x55:
-            # Read the rest: ct(1) + num_samples(1) + FSA(2) + LSA(2) = 6
-            hdr = ser.read(6)
-            if len(hdr) < 6:
-                print("Short header read — check wiring/baud rate.")
-                break
+        continue
+    if b[0] != 0xAA:
+        continue
+    b2 = ser.read(1)
+    if not b2 or b2[0] != 0x55:
+        continue
 
-            ct          = hdr[0]
-            num_samples = hdr[1]
-            fsa_raw     = hdr[2] | (hdr[3] << 8)
-            lsa_raw     = hdr[4] | (hdr[5] << 8)
-            angle_start = ((fsa_raw >> 1) & 0x7FFF) / 64.0
-            angle_end   = ((lsa_raw  >> 1) & 0x7FFF) / 64.0
+    hdr = ser.read(6)
+    if len(hdr) < 6:
+        continue
 
-            tail = ser.read(2 + num_samples * 2)
-            distances = []
-            for i in range(num_samples):
-                lo = tail[2 + i * 2]
-                hi = tail[2 + i * 2 + 1]
-                distances.append((lo | (hi << 8)) >> 2)
+    ct          = hdr[0]
+    num_samples = hdr[1]
+    fsa_raw     = hdr[2] | (hdr[3] << 8)
+    lsa_raw     = hdr[4] | (hdr[5] << 8)
+    angle_start = ((fsa_raw >> 1) & 0x7FFF) / 64.0
+    angle_end   = ((lsa_raw  >> 1) & 0x7FFF) / 64.0
 
-            print(f"Received scan packet — num_points: {num_samples}  "
-                  f"angle: {angle_start:.2f}° → {angle_end:.2f}°")
-            print(f"distances (mm): {distances[:10]}{'...' if num_samples > 10 else ''}")
-            print("Test passed.")
-            found = True
-            break
+    tail = ser.read(2 + num_samples * 2)
+    if len(tail) < 2 + num_samples * 2:
+        continue
 
-if not found:
-    print("No valid packet received — check port, baud rate, and wiring.")
+    # Decode distances — try both with and without >> 2 shift
+    dists_shifted   = []
+    dists_raw       = []
+    for i in range(num_samples):
+        lo = tail[2 + i * 2]
+        hi = tail[2 + i * 2 + 1]
+        raw_val = lo | (hi << 8)
+        dists_raw.append(raw_val)
+        dists_shifted.append(raw_val >> 2)
+
+    all_angles_start.append(angle_start)
+    all_angles_end.append(angle_end)
+    all_distances.extend(dists_shifted)
+
+    print(f"Pkt {packets_collected:02d} | "
+          f"angle {angle_start:6.2f}° → {angle_end:6.2f}° | "
+          f"n={num_samples:2d} | "
+          f"dist(>>2) {min(dists_shifted):4d}–{max(dists_shifted):4d} mm | "
+          f"dist(raw) {min(dists_raw):5d}–{max(dists_raw):5d}")
+
+    packets_collected += 1
+
+print(f"\n{'='*60}")
+print(f"Angle start range : {min(all_angles_start):.2f}° → {max(all_angles_start):.2f}°")
+print(f"Angle end range   : {min(all_angles_end):.2f}° → {max(all_angles_end):.2f}°")
+valid = [d for d in all_distances if 0 < d < 8000]
+if valid:
+    print(f"Valid distances   : {min(valid)}mm – {max(valid)}mm  (mean {sum(valid)//len(valid)}mm)")
+    print(f"Expected room     : walls should be ~1000–4000mm away")
+    print(f"\nIf dist(raw) values look more realistic than dist(>>2),")
+    print(f"remove the >> 2 shift in reader.py read_packet()")
+else:
+    print("No valid distances found — check wiring")
 
 ser.write(b"\xA5\x65")
 ser.close()
+

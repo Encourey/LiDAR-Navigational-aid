@@ -28,8 +28,8 @@ ZONES = [
     ("ahead",      -30,    30),
     ("left",        30,    90),
     ("right",      -90,   -30),
-    ("hard-left",   90,   150),
-    ("hard-right", -150,  -90),
+    ("hard-left",   90,   100),
+    ("hard-right", -100,  -90),
 ]
 
 

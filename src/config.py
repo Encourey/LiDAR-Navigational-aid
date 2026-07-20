@@ -10,9 +10,10 @@ MODEL_PATH   = "/home/admin/research/models/best_ncnn_model"
 LIDAR_PORT   = "/dev/ttyUSB0"
 
 # ── LiDAR serial (YDLIDAR X3 YB) ─────────────────────────────────────────────
-BAUD_RATE    = 115200    # X3 YB requires 115200 (was 115200 for RPLIDAR A1M8)
-MAX_DIST_MM  = 8000      # X3 reliable range ~8m (was 12000 for A1M8)
-MIN_QUALITY  = 5         # discard low-quality scan points
+BAUD_RATE           = 115200   # YDLIDAR X3 YB
+MAX_DIST_MM         = 8000
+MIN_QUALITY         = 5
+LIDAR_ANGLE_OFFSET  = 180      # degrees — physical mount rotation correction
 
 # ── BEV projection ────────────────────────────────────────────────────────────
 SIDE_RANGE   = (-8, 8)   # metres left/right
@@ -28,7 +29,7 @@ CLASS_NAMES  = {0: "car", 1: "pedestrian", 2: "cyclist"}
 MODE         = "auto"    # "outdoor" | "indoor" | "auto"
 
 # ── Indoor zone detection ─────────────────────────────────────────────────────
-INDOOR_WARN_DIST      = 2.5
+INDOOR_WARN_DIST      = 0.5
 INDOOR_DENSITY_THRESH = 4
 
 # ── Auto mode switching ───────────────────────────────────────────────────────
@@ -40,7 +41,7 @@ AUTO_SWITCH_FRAMES    = 5    # consecutive frames required before switching mode
 # not by time. This guarantees complete 360° coverage every frame.
 
 # ── Haptic (DRV2605L via I2C) ─────────────────────────────────────────────────
-HAPTIC_ENABLED = False
+HAPTIC_ENABLED = True
 DRV_I2C_ADDR   = 0x5A
 DRV_I2C_BUS    = 1
 

@@ -86,3 +86,4 @@ class ScanProducer:
             self._thread.join(timeout=2)
         self._reader.disconnect()
         print("[ScanProducer] Stopped.")
+
