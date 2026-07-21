@@ -103,7 +103,7 @@ class LidarReader:
         for i in range(num_samples):
             lo = tail[2 + i * 2]
             hi = tail[2 + i * 2 + 1]
-            distances.append(lo | (hi << 8))
+            distances.append((lo | (hi << 8)) >> 2)
 
         return {
             "distances":   distances,

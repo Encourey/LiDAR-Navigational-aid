@@ -111,7 +111,8 @@ def main():
             tag = current_mode[:3].upper()
             if alerts:
                 u, cls, d, info = alerts[0]
-                print(f"[{tag}][{u:7s}] {cls:12s} {d:11s} "
+                dist_str = f"{info:.2f}m" if isinstance(info, float) else ""
+                print(f"[{tag}][{u:7s}] {cls:12s} {d:11s} {dist_str:6s}"
                       f"| {len(pts):4d} pts | {elapsed:5.0f}ms "
                       f"| frame {frame_count}")
             else:
@@ -128,3 +129,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

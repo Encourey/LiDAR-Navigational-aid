@@ -3,35 +3,40 @@ navigation/indoor.py
 ────────────────────
 Zone-based proximity detection for indoor navigation.
 Requires NO machine learning — pure geometry on LiDAR point distances.
-Works on any surface, any object, any room without retraining.
 
-Zone layout (top-down view, sensor at centre):
-  ┌─────────────────────────────────┐
-  │         hard-left  hard-right   │
-  │   left  front-left │ front-right  right │
-  │         front                   │
-  │           ● (sensor)            │
-  └─────────────────────────────────┘
+Zone layout (top-down view, sensor at centre, 0° = forward = +X):
 
-Each zone spans an angular range and a distance threshold.
-If point density in a zone exceeds INDOOR_DENSITY_THRESH,
-an alert is raised with the zone direction and urgency.
+         hard-left (-150 to -90)    hard-right (90 to 150)
+              left (-90 to -30)     right (30 to 90)
+                      ahead (-30 to 30)
+                         ● sensor
+
+Angles from np.arctan2(y, x) — range -180° to +180°
+  0°   = right (+Y direction in image)
+  90°  = forward (+X direction)
+  -90° = backward (-X direction)
+  ±180° = left (-Y direction)
+
+Note: arctan2(y,x) with x=forward, y=left means:
+  ahead zone  = high positive X, small Y → angles near 0° won't work
+  Use atan2(y, x) correctly:
+    ahead      → x large positive, y small → angle near 0°... 
+
+Actually rewritten to use bearing from +X axis properly.
 """
 
 import numpy as np
 from src import config as cfg
 
-
-# Zone definitions: (direction_label, angle_min, angle_max)
-# Angles are from np.arctan2(y, x) — range -180 to +180 degrees
+# Zone definitions: (label, angle_min, angle_max)
+# arctan2(y, x): 0° = +X (forward), 90° = +Y (left), -90° = -Y (right)
 ZONES = [
-    ("ahead",      -30,    30),
-    ("left",        30,    90),
-    ("right",      -90,   -30),
-    ("hard-left",   90,   100),
-    ("hard-right", -100,  -90),
+    ("ahead",      -25,    25),
+    ("left",        25,    70),
+    ("right",      -70,   -25),
+    ("hard-left",   70,   100),
+    ("hard-right", -100,  -70),
 ]
-
 
 class IndoorNavigator:
     """Detects proximity obstacles using LiDAR point density per zone."""
@@ -40,7 +45,8 @@ class IndoorNavigator:
         """
         Check all zones for obstacle proximity.
         pts_array: Nx2 numpy array of (x, y) in metres.
-        Returns list of (urgency, "obstacle", direction, point_count) tuples.
+          x = forward, y = left (positive = left, negative = right)
+        Returns list of (urgency, "obstacle", direction, closest_dist) tuples.
         """
         if len(pts_array) == 0:
             return []
@@ -48,21 +54,22 @@ class IndoorNavigator:
         x    = pts_array[:, 0]
         y    = pts_array[:, 1]
         dist = np.sqrt(x**2 + y**2)
-        ang  = np.degrees(np.arctan2(y, x))   # -180 to +180
+        ang  = np.degrees(np.arctan2(y, x))   # 0°=forward, 90°=left, -90°=right
 
         alerts = []
         for direction, a_min, a_max in ZONES:
             in_zone = (dist < cfg.INDOOR_WARN_DIST) & (ang >= a_min) & (ang < a_max)
             count   = int(np.sum(in_zone))
-
             if count >= cfg.INDOOR_DENSITY_THRESH:
                 zone_dists = dist[in_zone]
-                closest    = float(np.min(zone_dists))
-                # WARNING if within half the warning distance
+                zone_dists = zone_dists[zone_dists > 0.05]  # filter zero/noise
+                if len(zone_dists) == 0:
+                    continue
+                closest = float(np.min(zone_dists)) + cfg.LIDAR_DISTANCE_OFFSET
                 urgency = "WARNING" if closest < cfg.INDOOR_WARN_DIST * 0.5 \
                           else "caution"
-                alerts.append((urgency, "obstacle", direction, count))
+                alerts.append((urgency, "obstacle", direction, closest))
 
-        # Sort: WARNING first
         alerts.sort(key=lambda a: a[0] != "WARNING")
         return alerts
+

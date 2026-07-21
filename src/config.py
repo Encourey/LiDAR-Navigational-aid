@@ -29,8 +29,9 @@ CLASS_NAMES  = {0: "car", 1: "pedestrian", 2: "cyclist"}
 MODE         = "auto"    # "outdoor" | "indoor" | "auto"
 
 # ── Indoor zone detection ─────────────────────────────────────────────────────
-INDOOR_WARN_DIST      = 0.5
+INDOOR_WARN_DIST      = 1
 INDOOR_DENSITY_THRESH = 4
+LIDAR_DISTANCE_OFFSET = +0.18
 
 # ── Auto mode switching ───────────────────────────────────────────────────────
 AUTO_SWITCH_DIST      = 4.0

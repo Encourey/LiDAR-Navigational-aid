@@ -113,4 +113,4 @@ class Detector:
 
         # Sort: WARNING first, then by confidence descending
         alerts.sort(key=lambda a: (a[0] != "WARNING", -a[3]))
-	return alerts
+        return alerts

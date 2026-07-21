@@ -86,4 +86,4 @@ class AutoNavigator:
                   f"{self._pending_count} frames)")
             self._mode          = candidate
             self._pending_mode  = None
-	    self._pending_count = 0
+        self._pending_count = 0

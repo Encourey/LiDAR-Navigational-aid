@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiDAR Nav Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+    --border: #2e3348; --text: #e8eaf0; --muted: #8891b0;
+    --accent: #4f8ef7; --success: #22c55e; --warning: #f59e0b;
+    --danger: #ef4444; --font: 'Inter', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+  .header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .header h1 { font-size: 16px; font-weight: 600; }
+  .header .sub { font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background 0.3s; }
+  .dot.ok { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .dot.err { background: var(--danger); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; max-width: 900px; margin: 0 auto; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .card-full { grid-column: 1 / -1; }
+  .card-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+  .card-value { font-size: 28px; font-weight: 600; }
+  .card-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .conn-row { display: flex; gap: 8px; align-items: center; }
+  .conn-row input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; outline: none; }
+  .conn-row input:focus { border-color: var(--accent); }
+  button { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity 0.15s; white-space: nowrap; }
+  button:hover { opacity: 0.85; }
+  button.danger { background: var(--danger); }
+  button.secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+  .badge-indoor { background: #1e3a5f; color: #60a5fa; }
+  .badge-outdoor { background: #1a3d2b; color: #4ade80; }
+  .badge-auto { background: #2d1f4e; color: #a78bfa; }
+  .alert-box { border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; transition: all 0.2s; }
+  .alert-ok   { background: #0f2d1a; border: 1px solid #166534; color: #4ade80; }
+  .alert-caut { background: #2d1f00; border: 1px solid #854d0e; color: #fbbf24; }
+  .alert-warn { background: #2d0f0f; border: 1px solid #991b1b; color: #f87171; }
+  .icon { font-size: 20px; flex-shrink: 0; }
+  .zones { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .zone { border-radius: 8px; border: 1px solid var(--border); padding: 10px 6px; text-align: center; transition: all 0.15s; }
+  .zone-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .zone-dist { font-size: 15px; font-weight: 600; color: var(--text); margin-top: 4px; }
+  .zone.warn { background: #2d0f0f; border-color: #991b1b; }
+  .zone.warn .zone-label { color: #f87171; }
+  .zone.warn .zone-dist { color: #f87171; }
+  .zone.caut { background: #2d1f00; border-color: #854d0e; }
+  .zone.caut .zone-label { color: #fbbf24; }
+  .zone.caut .zone-dist { color: #fbbf24; }
+  .hist { display: flex; align-items: flex-end; gap: 2px; height: 48px; margin-top: 10px; }
+  .bar { flex: 1; border-radius: 2px 2px 0 0; background: var(--accent); opacity: 0.6; min-height: 2px; transition: height 0.1s; }
+  .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .log { font-family: var(--mono); font-size: 12px; color: var(--muted); max-height: 160px; overflow-y: auto; line-height: 1.9; }
+  .log .warn-line { color: #f87171; }
+  .log .caut-line { color: #fbbf24; }
+  @media (max-width: 500px) { .grid { grid-template-columns: 1fr; } .card-full { grid-column: 1; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="dot" id="dot"></div>
+  <div>
+    <h1>LiDAR Navigation Dashboard</h1>
+    <div class="sub">Real-time monitoring</div>
+  </div>
+  <span class="badge badge-indoor" id="modeTag" style="margin-left:auto">—</span>
+</div>
+
+<div class="grid">
+
+  <div class="card card-full">
+    <div class="card-label">WebSocket Connection</div>
+    <div class="conn-row">
+      <input id="wsUrl" value="ws://172.16.9.228:8765" placeholder="ws://PI_IP:8765" />
+      <button id="connBtn" onclick="toggleConn()">Connect</button>
+    </div>
+  </div>
+
+  <div class="card card-full" style="margin-top:-4px">
+    <div id="alertBox" class="alert-box alert-ok">
+      <span class="icon">✓</span>
+      <span id="alertText">Not connected</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Points / scan</div>
+    <div class="card-value" id="ptsVal">—</div>
+    <div class="hist" id="hist"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Frame</div>
+    <div class="card-value" id="frameVal">—</div>
+    <div class="card-sub" id="fpsVal">— fps</div>
+  </div>
+
+  <div class="card card-full">
+    <div class="card-label" style="margin-bottom:10px">Zone Detection</div>
+    <div class="zones">
+      <div class="zone" id="z-hard-left"><div class="zone-label">Hard Left</div><div class="zone-dist" id="d-hard-left">—</div></div>
+      <div class="zone" id="z-left"><div class="zone-label">Left</div><div class="zone-dist" id="d-left">—</div></div>
+      <div class="zone" id="z-ahead"><div class="zone-label">Ahead</div><div class="zone-dist" id="d-ahead">—</div></div>
+      <div class="zone" id="z-right"><div class="zone-label">Right</div><div class="zone-dist" id="d-right">—</div></div>
+      <div class="zone" id="z-hard-right"><div class="zone-label">Hard Right</div><div class="zone-dist" id="d-hard-right">—</div></div>
+    </div>
+  </div>
+
+  <div class="card card-full">
+    <div class="log-header">
+      <div>
+        <div class="card-label" style="margin-bottom:0">Alert Log</div>
+        <span id="warnCount" style="font-size:12px;color:var(--muted)">0 warnings</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="secondary" onclick="clearLog()">Clear</button>
+        <button class="secondary" onclick="exportCSV()">Export CSV</button>
+      </div>
+    </div>
+    <div class="log" id="logBox">Waiting for connection…</div>
+  </div>
+
+</div>
+
+<script>
+let ws, connected = false, warnCount = 0;
+let ptsHist = new Array(40).fill(0);
+let lastFrameTime = null, lastFrameId = 0;
+const DIRS = ['hard-left','left','ahead','right','hard-right'];
+
+// All alerts stored for CSV export
+const allAlerts = [];
+
+// Throttle UI updates to max 10fps to prevent freezing
+let pendingFrame = null;
+let lastRender = 0;
+
+function toggleConn() {
+  if (connected) { ws && ws.close(); return; }
+  const url = document.getElementById('wsUrl').value.trim();
+  ws = new WebSocket(url);
+  ws.onopen = () => {
+    connected = true;
+    document.getElementById('dot').className = 'dot ok';
+    document.getElementById('connBtn').textContent = 'Disconnect';
+    document.getElementById('connBtn').className = 'danger';
+    setAlert('ok', 'Connected — waiting for scan data…');
+    document.getElementById('logBox').innerHTML = '';
+  };
+  ws.onclose = () => {
+    connected = false;
+    document.getElementById('dot').className = 'dot err';
+    document.getElementById('connBtn').textContent = 'Connect';
+    document.getElementById('connBtn').className = '';
+    document.getElementById('modeTag').textContent = '—';
+    setAlert('ok', 'Disconnected.');
+  };
+  ws.onerror = () => setAlert('warn', 'Connection failed — check the Pi IP and port.');
+  ws.onmessage = e => {
+    // Store latest frame, render at most 10fps
+    pendingFrame = JSON.parse(e.data);
+    const now = performance.now();
+    if (now - lastRender > 100) {
+      lastRender = now;
+      renderFrame(pendingFrame);
+    }
+  };
+}
+
+function renderFrame(d) {
+  const now = performance.now();
+  if (lastFrameTime && d.frame !== lastFrameId) {
+    document.getElementById('fpsVal').textContent = (1000 / (now - lastFrameTime)).toFixed(1) + ' fps';
+  }
+  lastFrameTime = now; lastFrameId = d.frame;
+  document.getElementById('frameVal').textContent = d.frame;
+  document.getElementById('modeTag').textContent = d.mode;
+  document.getElementById('modeTag').className = 'badge badge-' + d.mode;
+  document.getElementById('ptsVal').textContent = d.pts.toLocaleString();
+
+  ptsHist.push(d.pts); ptsHist.shift();
+  renderHist();
+
+  DIRS.forEach(dir => {
+    document.getElementById('z-' + dir).className = 'zone';
+    document.getElementById('d-' + dir).textContent = '—';
+  });
+
+  if (d.clear) {
+    setAlert('ok', 'Clear');
+  } else {
+    const top = d.alerts[0];
+    const type = top.urgency === 'WARNING' ? 'warn' : 'caut';
+    // Fix: only show distance if it's a valid non-zero float
+    const distVal = top.dist !== null ? top.dist : null;
+    const dist = distVal !== null ? ' — ' + distVal.toFixed(2) + 'm' : '';
+    setAlert(type, top.urgency + ': ' + top.cls + ' ' + top.direction + dist);
+
+    d.alerts.forEach(a => {
+      const z = document.getElementById('z-' + a.direction);
+      const dd = document.getElementById('d-' + a.direction);
+      if (z) {
+        z.className = 'zone ' + (a.urgency === 'WARNING' ? 'warn' : 'caut');
+        const aDistVal = a.dist !== null ? a.dist : null;
+        dd.textContent = aDistVal !== null ? aDistVal.toFixed(2) + 'm' : '—';
+      }
+    });
+
+    if (top.urgency === 'WARNING' || top.urgency === 'caution') {
+      warnCount++;
+      document.getElementById('warnCount').textContent = warnCount + ' warning' + (warnCount !== 1 ? 's' : '');
+      const t = new Date();
+      const timeStr = t.toLocaleTimeString();
+      const distStr = distVal !== null ? distVal.toFixed(2) + 'm' : 'n/a';
+
+      // Store for export
+      allAlerts.push({
+        timestamp: t.toISOString(),
+        urgency: top.urgency,
+        cls: top.cls,
+        direction: top.direction,
+        dist: distStr,
+        frame: d.frame,
+        pts: d.pts,
+      });
+
+      // Add to log (max 50 entries shown)
+      const lb = document.getElementById('logBox');
+      const line = document.createElement('div');
+      line.className = type + '-line';
+      line.textContent = timeStr + '  [' + top.urgency + '] ' + top.cls + ' ' + top.direction + '  ' + distStr;
+      lb.insertBefore(line, lb.firstChild);
+      while (lb.children.length > 50) lb.removeChild(lb.lastChild);
+    }
+  }
+}
+
+function setAlert(type, msg) {
+  const box = document.getElementById('alertBox');
+  box.className = 'alert-box alert-' + type;
+  box.querySelector('.icon').textContent = type === 'warn' ? '⚠' : type === 'caut' ? '!' : '✓';
+  document.getElementById('alertText').textContent = msg;
+}
+
+function renderHist() {
+  const hist = document.getElementById('hist');
+  const max = Math.max(...ptsHist, 1);
+  hist.innerHTML = ptsHist.map(v =>
+    '<div class="bar" style="height:' + Math.max(2, Math.round(v / max * 48)) + 'px"></div>'
+  ).join('');
+}
+
+function clearLog() {
+  document.getElementById('logBox').innerHTML = '';
+  warnCount = 0;
+  document.getElementById('warnCount').textContent = '0 warnings';
+}
+
+function exportCSV() {
+  if (allAlerts.length === 0) { alert('No alerts to export yet.'); return; }
+  const header = 'timestamp,urgency,class,direction,distance,frame,points\n';
+  const rows = allAlerts.map(a =>
+    `${a.timestamp},${a.urgency},${a.cls},${a.direction},${a.dist},${a.frame},${a.pts}`
+  ).join('\n');
+  const blob = new Blob([header + rows], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'lidar_alerts_' + new Date().toISOString().slice(0,19).replace(/:/g,'-') + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+renderHist();
+</script>
+</body>
+</html>
