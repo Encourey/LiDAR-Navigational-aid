@@ -95,3 +95,4 @@ class LidarParser:
             points.append(( dist_m * np.sin(angle_rad),
                             dist_m * np.cos(angle_rad)))
 
+

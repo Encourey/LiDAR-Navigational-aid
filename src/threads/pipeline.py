@@ -29,6 +29,8 @@ Frame staleness fix:
 """
 
 import threading
+import time
+import serial
 import numpy as np
 from src.lidar.reader import LidarReader
 from src.lidar.parser import LidarParser
@@ -63,12 +65,31 @@ class ScanProducer:
         print("[ScanProducer] Started.")
 
     def _run(self):
+        backoff = 0.5
         while self._active:
-            pts = self._parser.collect_scan()
-            if len(pts) >= 20:
-                with self._lock:
-                    self._latest   = pts
-                    self._frame_id += 1   # signal: new frame available
+            try:
+                pts = self._parser.collect_scan()
+                if len(pts) >= 20:
+                    with self._lock:
+                        self._latest   = pts
+                        self._frame_id += 1   # signal: new frame available
+                backoff = 0.5   # reset backoff after a clean read
+            except (serial.SerialException, OSError) as e:
+                print(f"[ScanProducer] Serial error: {e}")
+                print(f"[ScanProducer] Reconnecting in {backoff:.1f}s...")
+                try:
+                    self._reader.disconnect()
+                except Exception:
+                    pass
+                time.sleep(backoff)
+                if not self._active:
+                    break
+                try:
+                    self._reader.connect()
+                    print("[ScanProducer] Reconnected.")
+                except (serial.SerialException, OSError) as reconnect_err:
+                    print(f"[ScanProducer] Reconnect failed: {reconnect_err}")
+                    backoff = min(backoff * 2, 10.0)   # exponential backoff, capped at 10s
 
     def get_latest(self):
         """
@@ -86,4 +107,5 @@ class ScanProducer:
             self._thread.join(timeout=2)
         self._reader.disconnect()
         print("[ScanProducer] Stopped.")
+
 

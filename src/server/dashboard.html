@@ -25,6 +25,8 @@
   .card-full { grid-column: 1 / -1; }
   .card-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
   .card-value { font-size: 28px; font-weight: 600; }
+  .card-value.sm { font-size: 20px; }
+  .card-sm { padding: 12px 16px; }
   .card-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
   .conn-row { display: flex; gap: 8px; align-items: center; }
   .conn-row input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; outline: none; }
@@ -32,6 +34,7 @@
   button { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity 0.15s; white-space: nowrap; }
   button:hover { opacity: 0.85; }
   button.danger { background: var(--danger); }
+  button.success { background: var(--success); }
   button.secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
   .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
   .badge-indoor { background: #1e3a5f; color: #60a5fa; }
@@ -59,6 +62,10 @@
   .log .warn-line { color: #f87171; }
   .log .caut-line { color: #fbbf24; }
   @media (max-width: 500px) { .grid { grid-template-columns: 1fr; } .card-full { grid-column: 1; } }
+  .radar-row { grid-column: 1 / -1; display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: stretch; }
+  .side-stats { display: flex; flex-direction: column; gap: 12px; }
+  .side-stats .card { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  @media (max-width: 650px) { .radar-row { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -76,28 +83,33 @@
   <div class="card card-full">
     <div class="card-label">WebSocket Connection</div>
     <div class="conn-row">
-      <input id="wsUrl" value="ws://172.16.9.228:8765" placeholder="ws://PI_IP:8765" />
+      <input id="wsUrl" value="ws://10.30.57.117:8765" placeholder="ws://PI_IP:8765" />
       <button id="connBtn" onclick="toggleConn()">Connect</button>
+      <button id="runBtn" class="secondary" onclick="toggleRun()" disabled>Stop</button>
     </div>
-  </div>
-
-  <div class="card card-full" style="margin-top:-4px">
-    <div id="alertBox" class="alert-box alert-ok">
+    <div id="alertBox" class="alert-box alert-ok" style="margin-top:12px">
       <span class="icon">✓</span>
       <span id="alertText">Not connected</span>
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-label">Points / scan</div>
-    <div class="card-value" id="ptsVal">—</div>
-    <div class="hist" id="hist"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-label">Frame</div>
-    <div class="card-value" id="frameVal">—</div>
-    <div class="card-sub" id="fpsVal">— fps</div>
+  <div class="radar-row">
+    <div class="card" style="margin:0">
+      <div class="card-label" style="margin-bottom:10px">Scan Radar</div>
+      <canvas id="radar" width="700" height="360" style="width:100%;height:auto;display:block"></canvas>
+    </div>
+    <div class="side-stats">
+      <div class="card card-sm">
+        <div class="card-label">Points / scan</div>
+        <div class="card-value sm" id="ptsVal">—</div>
+        <div class="hist" id="hist"></div>
+      </div>
+      <div class="card card-sm">
+        <div class="card-label">Frame</div>
+        <div class="card-value sm" id="frameVal">—</div>
+        <div class="card-sub" id="fpsVal">— fps</div>
+      </div>
+    </div>
   </div>
 
   <div class="card card-full">
@@ -112,26 +124,34 @@
   </div>
 
   <div class="card card-full">
-    <div class="log-header">
+    <div class="log-header" onclick="toggleLog()" style="cursor:pointer;user-select:none">
       <div>
-        <div class="card-label" style="margin-bottom:0">Alert Log</div>
+        <div class="card-label" style="margin-bottom:0">Alert Log <span id="logCaret">▸</span></div>
         <span id="warnCount" style="font-size:12px;color:var(--muted)">0 warnings</span>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px" onclick="event.stopPropagation()">
         <button class="secondary" onclick="clearLog()">Clear</button>
         <button class="secondary" onclick="exportCSV()">Export CSV</button>
       </div>
     </div>
-    <div class="log" id="logBox">Waiting for connection…</div>
+    <div class="log" id="logBox" style="display:none">Waiting for connection…</div>
   </div>
 
 </div>
 
 <script>
 let ws, connected = false, warnCount = 0;
+let running = true;
 let ptsHist = new Array(40).fill(0);
 let lastFrameTime = null, lastFrameId = 0;
 const DIRS = ['hard-left','left','ahead','right','hard-right'];
+
+// Radar config — matches the 5-zone angular coverage (-100° to +100°) from indoor.py,
+// but bins finely (2° steps = 100 bars) for a smooth arc instead of 5 blocks.
+const RADAR_MIN_ANG = -100, RADAR_MAX_ANG = 100;
+const RADAR_BIN_DEG = 2;
+const RADAR_MAX_RANGE_M = 4;   // bars beyond this distance are clipped to full length
+const RADAR_BARS = Math.round((RADAR_MAX_ANG - RADAR_MIN_ANG) / RADAR_BIN_DEG);
 
 // All alerts stored for CSV export
 const allAlerts = [];
@@ -149,6 +169,7 @@ function toggleConn() {
     document.getElementById('dot').className = 'dot ok';
     document.getElementById('connBtn').textContent = 'Disconnect';
     document.getElementById('connBtn').className = 'danger';
+    document.getElementById('runBtn').disabled = false;
     setAlert('ok', 'Connected — waiting for scan data…');
     document.getElementById('logBox').innerHTML = '';
   };
@@ -157,6 +178,7 @@ function toggleConn() {
     document.getElementById('dot').className = 'dot err';
     document.getElementById('connBtn').textContent = 'Connect';
     document.getElementById('connBtn').className = '';
+    document.getElementById('runBtn').disabled = true;
     document.getElementById('modeTag').textContent = '—';
     setAlert('ok', 'Disconnected.');
   };
@@ -172,7 +194,33 @@ function toggleConn() {
   };
 }
 
+function toggleLog() {
+  const box = document.getElementById('logBox');
+  const caret = document.getElementById('logCaret');
+  const open = box.style.display !== 'none';
+  box.style.display = open ? 'none' : 'block';
+  caret.textContent = open ? '▸' : '▾';
+}
+
+function toggleRun() {
+  if (!connected || !ws) return;
+  const cmd = running ? 'stop' : 'start';
+  ws.send(JSON.stringify({ cmd }));
+}
+
 function renderFrame(d) {
+  running = d.running !== false;
+  const runBtn = document.getElementById('runBtn');
+  runBtn.textContent = running ? 'Stop' : 'Start';
+  runBtn.className = running ? 'danger' : 'success';
+
+  if (!running) {
+    setAlert('caut', 'Paused — nav loop stopped.');
+    document.getElementById('frameVal').textContent = d.frame;
+    document.getElementById('modeTag').textContent = d.mode;
+    return; // skip the rest — alerts/zones/radar stay frozen at last known state
+  }
+
   const now = performance.now();
   if (lastFrameTime && d.frame !== lastFrameId) {
     document.getElementById('fpsVal').textContent = (1000 / (now - lastFrameTime)).toFixed(1) + ' fps';
@@ -185,6 +233,7 @@ function renderFrame(d) {
 
   ptsHist.push(d.pts); ptsHist.shift();
   renderHist();
+  drawRadar(d.scan || []);
 
   DIRS.forEach(dir => {
     document.getElementById('z-' + dir).className = 'zone';
@@ -240,6 +289,96 @@ function renderFrame(d) {
   }
 }
 
+function drawRadar(scan) {
+  const canvas = document.getElementById('radar');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const cx = W / 2, cy = H - 20;          // sensor origin: bottom-center
+  const R  = Math.min(H - 40, W / 2 - 20); // max bar length
+
+  // Bin the raw scan into fine angular slices, keep the CLOSEST point per bin
+  // (closest = most relevant obstacle for that direction).
+  const bins = new Array(RADAR_BARS).fill(null);
+  for (const [ang, dist] of scan) {
+    if (ang < RADAR_MIN_ANG || ang > RADAR_MAX_ANG) continue;
+    const idx = Math.min(RADAR_BARS - 1, Math.floor((ang - RADAR_MIN_ANG) / RADAR_BIN_DEG));
+    if (bins[idx] === null || dist < bins[idx]) bins[idx] = dist;
+  }
+
+  // Background arc guides (grid rings)
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  for (let f = 0.33; f <= 1; f += 0.33) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * f, Math.PI, 2 * Math.PI);
+    ctx.stroke();
+  }
+
+  const barW = (Math.PI / (RADAR_BARS)) * 0.85; // angular width per bar, in radians, with gap
+
+  for (let i = 0; i < RADAR_BARS; i++) {
+    const dist = bins[i];
+    // Bar angle: map bin index -> radar theta, where 0°(ahead) is straight up.
+    // RADAR_MIN_ANG (-100, hard-right) -> left edge, RADAR_MAX_ANG (+100, hard-left) -> right edge.
+    const angDeg = RADAR_MIN_ANG + (i + 0.5) * RADAR_BIN_DEG;
+
+    if (dist === null) continue; // no return in this slice — leave empty
+
+    const clipped = Math.min(dist, RADAR_MAX_RANGE_M);
+    const len = (clipped / RADAR_MAX_RANGE_M) * R;
+
+    // angDeg follows indoor.py's atan2(y, x): 0°=forward, +90°=left, -90°=right.
+    // Screen: forward = up (-Y), left = left (-X). So:
+    //   dx = -sin(angDeg) (positive/left angle -> negative screen X)
+    //   dy = -cos(angDeg) (forward -> negative screen Y, i.e. up)
+    const rad = angDeg * Math.PI / 180;
+    const dx = -Math.sin(rad);
+    const dy = -Math.cos(rad);
+
+    // Color by proximity: near = danger, mid = caution, far = safe
+    let color;
+    if (dist < 0.5) color = '#ef4444';
+    else if (dist < 1.0) color = '#f59e0b';
+    else color = '#4f8ef7';
+
+    const x1 = cx + dx * 6,   y1 = cy + dy * 6;
+    const x2 = cx + dx * len, y2 = cy + dy * len;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.min(3, (2 * Math.PI * R / RADAR_BARS) * 0.5) || 2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  // Sensor origin marker — bright dot with glow + small baseline, so it reads
+  // clearly as "this is the LiDAR" even against a busy set of bars.
+  ctx.save();
+  ctx.shadowColor = '#4f8ef7';
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = '#4f8ef7';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 6, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - 14, cy);
+  ctx.lineTo(cx + 14, cy);
+  ctx.stroke();
+
+  ctx.fillStyle = 'var(--muted)'.startsWith('var') ? '#8891b0' : '#8891b0';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('LiDAR', cx, cy + 16);
+}
+
 function setAlert(type, msg) {
   const box = document.getElementById('alertBox');
   box.className = 'alert-box alert-' + type;
@@ -280,3 +419,4 @@ renderHist();
 </script>
 </body>
 </html>
+

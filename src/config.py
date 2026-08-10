@@ -7,7 +7,7 @@ All tunable parameters live here — no magic numbers elsewhere.
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 MODEL_PATH   = "/home/admin/research/models/best_ncnn_model"
-LIDAR_PORT   = "/dev/ttyUSB0"
+LIDAR_PORT   = "/dev/ydlidar"
 
 # ── LiDAR serial (YDLIDAR X3 YB) ─────────────────────────────────────────────
 BAUD_RATE           = 115200   # YDLIDAR X3 YB
