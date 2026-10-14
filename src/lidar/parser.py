@@ -1,57 +1,98 @@
 """
 lidar/parser.py
 ───────────────
-Parses raw RPLIDAR A1M8 scan bytes into numpy point arrays.
+Parses YDLIDAR X3 YB scan packets into numpy point arrays.
 
-RPLIDAR A1M8 scan packet format (5 bytes per point):
-  Byte 0: quality[7:2] | new_scan[0]
-  Byte 1: angle[6:0] << 1 | check_bit
-  Byte 2: angle[14:7]
-  Byte 3: distance[7:0]
-  Byte 4: distance[15:8]
-  angle    = (byte1>>1 | byte2<<7) / 64.0   degrees
-  distance = (byte3 | byte4<<8)   / 4.0     mm
+The X3 delivers packets continuously. Each packet covers a segment of the
+360° sweep. A full rotation is complete when angle_end wraps past 0°
+(i.e. angle_end < prev_end and prev_end > 300).
+
+We collect packets until we detect this wrap, guaranteeing a complete 360°
+scan every call — no partial scans from fixed-duration collection.
+
+Angle interpolation:
+  Each packet gives angle_start and angle_end, and N distance samples
+  between them. We linearly interpolate the angle for each sample.
+
+Coordinate system:
+  x = forward (positive away from sensor, 0° direction)
+  y = left    (negative = right)
 """
 
-import time
 import numpy as np
 from src import config as cfg
 
 
 class LidarParser:
-    """Converts raw serial bytes from LidarReader into numpy scan arrays."""
+    """Converts YDLIDAR X3 packet stream into numpy scan arrays."""
 
     def __init__(self, reader):
         self._reader = reader
 
-    def collect_scan(self, duration=None):
+    def collect_scan(self):
         """
-        Collect scan points for `duration` seconds.
-        Filters by quality and max distance from config.
-        Returns Nx2 numpy array of (x, y) in metres.
-          x = forward (away from sensor)
-          y = left (negative = right)
-        """
-        dur = duration or cfg.SCAN_DURATION
-        xs, ys = [], []
-        start  = time.time()
+        Collect one complete 360° scan.
+        Reads packets until the angle wraps (end < start crossing 0°),
+        indicating a full rotation has been received.
 
-        while time.time() - start < dur:
-            raw = self._reader.read_raw_bytes(5)
-            if len(raw) < 5:
+        Filters by MAX_DIST_MM and discards zero-distance (invalid) readings.
+        Returns Nx2 numpy array of (x, y) in metres.
+        """
+        current   = []   # points accumulating for this rotation
+        prev_end  = None
+        max_pkts  = 400
+        result    = []   # will hold the first complete rotation
+
+        for _ in range(max_pkts):
+            pkt = self._reader.read_packet()
+            if pkt is None:
                 continue
 
-            b0, b1, b2, b3, b4 = raw
-            quality  = b0 >> 2
-            angle    = ((b1 >> 1) | (b2 << 7)) / 64.0
-            distance = ((b3) | (b4 << 8)) / 4.0   # mm
+            a_start = pkt["angle_start"]
+            a_end   = pkt["angle_end"]
+            dists   = pkt["distances"]
+            n       = pkt["num_points"]
 
-            if quality > cfg.MIN_QUALITY and 0 < distance < cfg.MAX_DIST_MM:
-                angle_rad = np.deg2rad(angle % 360)
-                xs.append((distance / 1000.0) * np.cos(angle_rad))
-                ys.append(-(distance / 1000.0) * np.sin(angle_rad))
+            if n == 0:
+                continue
 
-        if not xs:
-            return np.empty((0, 2))
+            wrap_inside  = a_end < a_start and a_start > 300
+            wrap_between = prev_end is not None and prev_end > 300 and a_start < 60
 
-        return np.column_stack([xs, ys])
+            if wrap_inside or wrap_between:
+                # Snapshot completed rotation if it has enough points
+                if len(current) > 100:
+                    result = list(current)
+                    break   # done — return this complete rotation
+                # Too few points — rotation was partial, discard and restart
+                current = []
+
+            self._add_points(current, a_start, a_end, dists, n)
+            prev_end = a_end
+
+        if not result:
+            result = current   # fallback if wrap never triggered
+
+        return np.array(result, dtype=np.float32) if result else np.empty((0, 2))
+
+    def _add_points(self, points, a_start, a_end, dists, n):
+        """
+        Interpolate angles across the packet and convert to (x, y).
+        Appends (x, y) tuples to `points`. Skips zero/out-of-range distances.
+        """
+        if a_end < a_start:
+            a_end += 360.0
+
+        angles = np.linspace(a_start, a_end, n) if n > 1 else np.array([a_start])
+
+        for angle, dist_mm in zip(angles, dists):
+            if dist_mm == 0 or dist_mm > cfg.MAX_DIST_MM:
+                continue
+            angle_rad = np.deg2rad((angle - cfg.LIDAR_ANGLE_OFFSET) % 360)
+            dist_m    = dist_mm / 1000.0
+            # YDLIDAR X3 angle 0° = forward, increases clockwise
+            # x = forward, y = left (positive left)
+            points.append(( dist_m * np.sin(angle_rad),
+                            dist_m * np.cos(angle_rad)))
+
+

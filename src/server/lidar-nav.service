@@ -1,0 +1,19 @@
+[Unit]
+Description=LiDAR Navigation System
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/research
+ExecStartPre=/bin/sleep 5
+ExecStart=/home/admin/research/venv/bin/python src/server/ws_server.py --mode indoor
+ExecStop=/bin/kill -SIGTERM $MAINPID
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
