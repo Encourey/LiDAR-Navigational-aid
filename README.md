@@ -282,9 +282,9 @@ The scripts in `tests/` are manual hardware checks, not an automated suite:
 - Authenticate the WebSocket and restrict what the dashboard server exposes
 ## Acknowledgements and licences
  
-- Detection built on [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics), which is released under AGPL-3.0. Check what that means for your own licence.
+- Detection built on [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics), which is released under AGPL-3.0.
 - Training data: Geiger, Lenz and Urtasun, *Are we ready for autonomous driving? The KITTI vision benchmark suite*, CVPR 2012. KITTI is provided for non-commercial use; check its terms before redistributing anything derived from it.
-- _Add supervisors, collaborators and your own project licence._
+- AGPL-3.0 License: See the LICENSE file for full details.
 <details>
 <summary>Windows PowerShell shortcuts for controlling the Pi</summary>
 Add these to your PowerShell profile (`notepad $PROFILE`, paste, save, restart PowerShell):
