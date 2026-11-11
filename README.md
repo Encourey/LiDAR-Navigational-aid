@@ -1,5 +1,7 @@
 # LiDAR Navigational Aid
 
+**English** | [ไทย](README.TH.md)
+
 A real-time obstacle-detection and navigation-assistance prototype built on a 2D LiDAR and a Raspberry Pi 5. It warns the user of nearby obstacles through haptic and audio feedback, and streams live scan data to a web dashboard.
 
 <!-- TODO: add a photo of the device and a screenshot or GIF of the dashboard, e.g. docs/images/ -->
@@ -107,8 +109,8 @@ The interesting work in this project is in the problems that came up between a w
  
 | Problem | What was done | Result |
 |---|---|---|
-| **Serial reading was dominated by system calls.** The first reader made several small reads per packet, and one per byte whenever it had to resync. | `LidarReader` reads 512-byte chunks into a local buffer, parses packets from memory, and only tops up when the buffer runs low. | **4.00 → 0.14 `read()` calls per packet (−96.6%)**, with byte-for-byte identical decoded packets. Measured on a synthetic X3 stream with `tests/serial_read_benchmark.py`. On-Pi timing: _TODO_ |
-| **Scan collection and inference ran back to back.** The loop waited for a full rotation, then waited again for the detector. | A `ScanProducer` thread publishes the latest scan; the navigation loop always works on the newest frame and skips any it missed. | About 5.6 FPS → about 10 FPS in development measurements. Re-measure on the Pi: _TODO_ |
+| **Serial reading was dominated by system calls.** The first reader made several small reads per packet, and one per byte whenever it had to resync. | `LidarReader` reads 512-byte chunks into a local buffer, parses packets from memory, and only tops up when the buffer runs low. | **4.00 → 0.14 `read()` calls per packet (−96.6%)**, with byte-for-byte identical decoded packets. Measured on a synthetic X3 stream with `tests/serial_read_benchmark.py`. |
+| **Scan collection and inference ran back to back.** The loop waited for a full rotation, then waited again for the detector. | A `ScanProducer` thread publishes the latest scan; the navigation loop always works on the newest frame and skips any it missed. | About 5.6 FPS → about 10 FPS in development measurements. |
 | **A runaway loop reprocessed the same scan** (about 127,000 "frames" at 0 ms each). | Every new scan increments a `frame_id`; the loop only processes a frame when the id changes and otherwise sleeps 10 ms. | Each scan is processed exactly once. |
 | **Speech blocked the navigation loop** (about 600 ms per phrase with `pyttsx3`). | Speech runs in a daemon thread; if a phrase is still playing, the new one is dropped instead of queued, because a stale alert is worse than none. | Alerts never stall scan processing. |
 | **Fixed-duration collection produced partial scans.** | Scans are collected per full rotation by detecting the angle wrap, with incomplete rotations discarded. | Every frame covers 360°. |
