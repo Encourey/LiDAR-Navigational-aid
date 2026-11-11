@@ -275,6 +275,15 @@ The scripts in `tests/` are manual hardware checks, not an automated suite:
 - **No latency figure yet** for the full path from scan to haptic pulse.
 - **Open network interfaces.** See the security note above.
 
+## Roadmap
+ 
+- Fix the two known issues, then re-validate auto and outdoor modes on real scans
+- Collect and label X3 scans, and fine-tune the detector on them
+- Measure end-to-end latency, from scan to haptic pulse
+- Wire up the speaker and enable audio feedback
+- Add a `requirements.txt` and remove hard-coded `/home/admin/research` paths
+- Authenticate the WebSocket and restrict what the dashboard server exposes
+
 ## Acknowledgements and licences
  
 - Detection built on [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics), which is released under AGPL-3.0.
