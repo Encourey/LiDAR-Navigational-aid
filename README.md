@@ -2,7 +2,7 @@
 
 **English** | [ไทย](README.TH.md)
 
-A real-time obstacle-detection and navigation-assistance prototype built on a 2D LiDAR and a Raspberry Pi 5. It warns the user of nearby obstacles through haptic and audio feedback, and streams live scan data to a web dashboard.
+A real-time obstacle-detection and navigation-assistance prototype built on a 2D LiDAR and a Raspberry Pi 5. It warns the user of nearby obstacles through haptic or audio feedback, and streams live scan data to a web dashboard.
 
 <!-- TODO: add a photo of the device and a screenshot or GIF of the dashboard, e.g. docs/images/ -->
 
@@ -20,9 +20,9 @@ A real-time obstacle-detection and navigation-assistance prototype built on a 2D
 A YDLIDAR X3 spins to produce a live 360° point cloud. The system reasons about it in one of two ways:
  
 - **Indoor mode:** pure geometry. Points are bucketed into five directional zones, and an alert fires when enough points fall inside a distance threshold. No model is needed.
-- **Outdoor mode:** the point cloud is projected into a Bird's-Eye-View (BEV) image and passed through a YOLOv8n-OBB model, exported to NCNN for CPU inference on the Pi, to detect cars, pedestrians and cyclists.
+- **Outdoor mode:** the point cloud is projected into a Bird's-Eye-View (BEV) image and passed through a YOLOv8n-OBB model, exported to NCNN for CPU inference on the Pi, to detect cars, pedestrians and cyclists. (Does not currently work. See [why](#model))
 - **Auto mode:** chooses between the two from the average point distance of each scan, using a frame-voting scheme so a single noisy scan cannot flip the mode.
-Alerts are delivered as haptic pulses (DRV2605L) and spoken phrases (pyttsx3), and can also be streamed over WebSocket to a browser dashboard that shows the scan, the current mode and the alerts, with remote start and stop.
+Alerts are delivered as haptic pulses (DRV2605L) and spoken phrases (pyttsx3), and can also be streamed over WebSocket to a browser dashboard that shows the scan, the current mode and the alerts, with remote start and stop. (Under development. See [Known issues](#known-issues) )
  
 ## Project status
  
@@ -49,7 +49,7 @@ flowchart TD
     I --> AL["Alerts<br/>urgency, class, direction, distance"]
     O --> AL
     AL --> H["Haptic<br/>DRV2605L"]
-    AL --> S["Audio<br/>pyttsx3 TTS"]
+    AL --> S["Audio (experimental)<br/>pyttsx3 TTS"]
     AL --> W["WebSocket server :8765"]
     P -. "scan points" .-> W
     W <--> D["Browser dashboard<br/>radar, alert log, start/stop"]
